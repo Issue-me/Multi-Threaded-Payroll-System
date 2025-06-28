@@ -1,0 +1,149 @@
+//S11222292	Ishal Chand
+//S11219885	Rahul Chand
+//S11215227	Daniyal Sultan
+
+#include <stdio.h> //for print and scan functions
+#include <stdlib.h> //for utility functions like malloc and free
+#include <pthread.h> //header for thread
+#include <string.h> //for string manipulation functions
+#include <ctype.h> //for character handling functions
+
+//fixed global variables
+#define MAX_EMPLOYEES 5
+#define HOURS 40
+#define OVERTIME_RATE 1.5
+#define SUPERANNUATION_RATE 0.08
+
+//declared a structure and within it contains declared variables of an Employee
+typedef struct {
+    char employee_id[10]; //employee id can take up to 10 characters
+    char employee_name[50]; //employee name can take up to 50 characters
+    double annual_salary; 
+    int hours_worked;
+    double gross_pay;
+    double superannuation_deduction;
+    double net_pay;
+} Employee;
+
+Employee employees[MAX_EMPLOYEES] = { 
+//allocated the Employee variables to a value
+    {"S11222292", "Ishal Chand", 10000},
+    {"S11219885", "Rahul Chand", 12500},
+    {"S11215227", "Daniyal Sultan", 15000},
+    {"S11222844", "Eric Trage", 22000},
+    {"S12364746", "Trishie Datt", 25500}
+};
+
+pthread_mutex_t lock; //for synchronization (mutual exclusion and thread) locked
+
+void* calculate_payroll(void* arg) { 
+    Employee* emp = (Employee*)arg; //arg allows access to employee data
+
+    pthread_mutex_lock(&lock); 
+//ensures only 1 thread can lock execute the block and prevents race conditions
+
+    double hourly_rate = emp->annual_salary / 52 / HOURS; //calculates hourly rate
+    if (emp->hours_worked > HOURS) { //if worked overtime 
+        int overtime_hours = emp->hours_worked - HOURS;
+        emp->gross_pay = (HOURS * hourly_rate) + (overtime_hours * hourly_rate * OVERTIME_RATE);
+    } else { //if worked normal hours
+        emp->gross_pay = emp->hours_worked * hourly_rate;
+    }
+
+    emp->superannuation_deduction = emp->gross_pay * SUPERANNUATION_RATE; //deduction by 8%
+    emp->net_pay = emp->gross_pay - emp->superannuation_deduction; //calculates net pay
+
+    pthread_mutex_unlock(&lock); 
+//unlocks mutex to allow other threads to access this part of the code
+    return NULL;
+}
+
+//function to check if the input is a valid integer
+int is_valid_integer(const char* str) {
+    while (*str) {
+        if (!isdigit(*str)) {
+            return 0; //not a valid integer
+        }
+        str++;
+    }
+    return 1; //valid integer
+}
+
+//function to check if the employee ID is valid and present
+int is_valid_employee_id(const char* id) {
+    //check if the ID is not empty and does not contain negative signs
+    if (strlen(id) == 0 || strchr(id, '-') != NULL) {
+        return 0; // Invalid ID
+    }
+    return 1; // Valid ID
+}
+
+int main() {
+    pthread_t threads[MAX_EMPLOYEES]; //array of identifiers created 
+    char employee_id[10];
+    char hours_worked_input[10];
+    int hours_worked;
+    int found = 0; //to indicate if employee was found
+
+    pthread_mutex_init(&lock, NULL); //initializes the mutex lock
+
+    //asks employee for ID and number of hours worked
+    do {
+        printf("Enter Employee ID: ");
+        scanf("%s", employee_id); //checking
+        if (!is_valid_employee_id(employee_id)) {
+            printf("Error: Please enter a valid Employee ID (no negative signs or empty).\n");
+        }
+    } while (!is_valid_employee_id(employee_id));
+
+    //input validation for hours worked
+    do { 
+        //user  enters a positive value of hours worked
+        printf("Enter number of hours worked in a week (must be non-negative): ");
+        scanf("%s", hours_worked_input);
+        if (!is_valid_integer(hours_worked_input)) { 
+        //check if input is a valid integer
+            printf("Error: Please enter a valid integer for hours worked.\n");
+            continue;
+        }
+        hours_worked = atoi(hours_worked_input); //converts string to integer
+        if (hours_worked < 0) { //if hours worked is negative
+            printf("Error: Hours worked cannot be negative. Please enter a valid value.\n");
+        }
+    } while (hours_worked < 0);
+
+    for (int i = 0; i < MAX_EMPLOYEES; i++) { 
+    //iterates through the employee array
+        if (strcmp(employees[i].employee_id, employee_id) == 0) { 
+            employees[i].hours_worked = hours_worked;
+            found = 1; //employee found
+
+            pthread_create(&threads[i], NULL, calculate_payroll, (void*)&employees[i]); 
+            pthread_join(threads[i], NULL); //joins (executes, stores and combines thread)
+
+            //printing results in a tabular format
+            printf("\nEmployee Details:\n");
+            printf("+----------------+--------------------+-------------+--------------------------+-----------------+\n");
+            printf("| Employee ID    | Employee Name      | Gross Pay   | Superannuation Deduction | Net Pay         |\n");
+            printf("+----------------+--------------------+-------------+--------------------------+-----------------+\n");
+            printf("| %-14s | %-18s | %-11.2f | %-24.2f | %-15.2f |\n", 
+                   employees[i].employee_id, 
+                   employees[i].employee_name, 
+                   employees[i].gross_pay, 
+                   employees[i].superannuation_deduction, 
+                   employees[i].net_pay);
+            printf("+----------------+--------------------+-------------+--------------------------+-----------------+\n");
+            break;
+        }
+    }
+
+    //if employee not found
+    if (!found) {
+        printf("Employee ID not found.\n");
+    }
+
+    //pthread and mutual exclusion (lock gets destroyed)
+    pthread_mutex_destroy(&lock);
+
+    return 0;
+}
